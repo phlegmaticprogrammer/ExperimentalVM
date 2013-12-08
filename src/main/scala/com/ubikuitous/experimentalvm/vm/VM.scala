@@ -146,6 +146,20 @@ object Instruction {
       true
     }               
   } 
+  
+  case object EQUIV extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrEQUIV()
+      true
+    }               
+  } 
+
+  case object NEQUIV extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrNEQUIV()
+      true
+    }               
+  } 
     
   case object EQ extends Instruction {
     def execute(vm : RunVM) : Boolean = {
@@ -160,7 +174,7 @@ object Instruction {
       true
     }               
   } 
-  
+    
   case object LE extends Instruction {
     def execute(vm : RunVM) : Boolean = {
       vm.instrLE()
@@ -325,6 +339,14 @@ trait RunVM extends VM {
     val v = popb()
     pushb(u || v)
   }  
+  
+  final def instrEQUIV() {
+    pushb(popb() == popb())
+  }
+  
+  final def instrNEQUIV() {
+    pushb(popb() != popb())
+  }
       
   final def instrLOADINT(i : INT) {
     push(i)
