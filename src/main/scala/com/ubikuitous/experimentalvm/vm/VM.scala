@@ -43,7 +43,7 @@ trait Stack {
 trait ProgramStore {
 
   // set the CP to cp
-  def goto(cp : CodePointer)
+  def goto(cp : CodePointer) { goto(cp, 0) }
   
   // set the CP to (cp + i)
   def goto(cp : CodePointer, i : Long)
@@ -58,6 +58,36 @@ trait ProgramStore {
 
 sealed abstract class Instruction {
   def execute(vm : RunVM) : Boolean 
+}
+
+trait VM {
+  
+  val stack : Stack
+  val heap : Heap
+  val programStore : ProgramStore
+  var GP : Reference  
+  
+  final def resolve(delta : Long) : Value = {
+    stack.get(stack.SP - delta) match {
+      case e : Value.INT => e
+      case r : Reference => heap.resolve(r)
+    }
+  }
+    
+  final def pop() : Value = {
+    stack.pop() match {
+      case e : Value.INT => e
+      case r : Reference => heap.resolve(r)
+    }
+  }
+    
+  final def push(value : Value) = {
+    value match {
+      case i : Value.INT => stack.push(i)
+      case _ => stack.push(heap.alloc(value))
+    }
+  }
+
 }
 
 object Instruction {
@@ -225,35 +255,6 @@ object Instruction {
   } 
 }
 
-trait VM {
-  val stack : Stack
-  val heap : Heap
-  val programStore : ProgramStore
-  var GP : Reference  
-  
-  final def resolve(delta : Long) : Value = {
-    stack.get(stack.SP - delta) match {
-      case e : Value.INT => e
-      case r : Reference => heap.resolve(r)
-    }
-  }
-    
-  final def pop() : Value = {
-    stack.pop() match {
-      case e : Value.INT => e
-      case r : Reference => heap.resolve(r)
-    }
-  }
-    
-  final def push(value : Value) = {
-    value match {
-      case i : Value.INT => stack.push(i)
-      case _ => stack.push(heap.alloc(value))
-    }
-  }
-
-}
-
 trait RunVM extends VM {
   
   def run() {
@@ -393,7 +394,7 @@ trait RunVM extends VM {
   final def instrGEQ() {
     pushb(popi() >= popi())
   }
-
+  
 }
 
 object Test {
