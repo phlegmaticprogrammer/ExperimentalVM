@@ -62,18 +62,6 @@ class CodeBlock(val id : Int, val description : Option[String]) {
   private var _instructions : Vector[Instruction] = Vector()
     
   def += (instr : Instruction) {
-    instr match {
-      case Instruction.SLIDE(q, m) =>
-        if (size > 0) {
-          instruction(size - 1) match {
-            case Instruction.SLIDE(p, n) if n <= m && n + p >= m =>
-              replace(size - 1, Instruction.SLIDE(q + p, n))
-              return
-            case _ =>
-          }
-        }
-      case _ =>
-    }
     _instructions = _instructions :+ instr
   }
   

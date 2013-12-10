@@ -29,6 +29,18 @@ class Compiler(builder : CodeBuilder) {
     if (evaluated) code += EVAL
   }
   
+  def slide(code : CodeBlock, q : Long, m : Long) {
+    if (code.size > 0) {
+      code.instruction(code.size - 1) match {
+        case SLIDE(p, n) if n <= m && n + p >= m =>
+          code.replace(code.size - 1, SLIDE(q + p, n))
+          return
+        case _ =>
+      }
+    }
+    code += SLIDE(q, m)
+  }
+  
   /**
    * compile does result in an INT or a ref to a value 
    * if evaluated is true, then the value may not be a closure
@@ -81,7 +93,7 @@ class Compiler(builder : CodeBuilder) {
       case Let(Definition(name, expr), body) =>
         compile(false, env, stacklevel, code, expr)
         compile(evaluated, env + (name -> Local(stacklevel+1)), stacklevel+1, code, body)
-        code += SLIDE(1, 1)
+        slide(code, 1, 1)
       case _ => throw new RuntimeException("cannot compile: " + expr)       
     }
   }
