@@ -68,11 +68,15 @@ class CodeBlock(val id : Int, val description : Option[String]) {
   def += (instruction : Instruction) {
     _instructions = _instructions :+ instruction
   }
+
+  def replace(index : Long, instruction : Instruction) {
+    _instructions = _instructions.patch(index.toInt, List(instruction), 1)
+  }  
   
   def ptr(index : Long) : CodePointer = new SimpleCodePointer(id, index)
-  
+    
   def instruction(index : Long) : Instruction = _instructions(index.toInt)
-  
+    
   def size : Long = _instructions.size
   
 }

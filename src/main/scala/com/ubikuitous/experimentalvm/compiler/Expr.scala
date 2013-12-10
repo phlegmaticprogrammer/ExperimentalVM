@@ -13,7 +13,7 @@ object Expr {
   case class Let(definition : Definition, body : Expr) extends Expr
   case class LetRec(definitions : List[Definition], body : Expr) extends Expr
   case class Lazy(expr : Expr) extends Expr  
-
+ 
   sealed trait UnaryOperator 
   case object Neg extends UnaryOperator
   case object Not extends UnaryOperator
