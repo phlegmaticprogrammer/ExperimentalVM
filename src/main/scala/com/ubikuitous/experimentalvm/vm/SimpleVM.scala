@@ -60,14 +60,26 @@ final class SimpleStack(initialSize : Int) extends Stack {
 class CodeBlock(val id : Int, val description : Option[String]) {
   
   private var _instructions : Vector[Instruction] = Vector()
+    
+  def += (instr : Instruction) {
+    instr match {
+      case Instruction.SLIDE(q, m) =>
+        if (size > 0) {
+          instruction(size - 1) match {
+            case Instruction.SLIDE(p, n) if n <= m && n + p >= m =>
+              replace(size - 1, Instruction.SLIDE(q + p, n))
+              return
+            case _ =>
+          }
+        }
+      case _ =>
+    }
+    _instructions = _instructions :+ instr
+  }
   
   def ++=(instructions : Vector[Instruction]) {
-    _instructions = _instructions ++ instructions
-  }
-  
-  def += (instruction : Instruction) {
-    _instructions = _instructions :+ instruction
-  }
+    for (instr <- instructions) this += instr
+  }  
 
   def replace(index : Long, instruction : Instruction) {
     _instructions = _instructions.patch(index.toInt, List(instruction), 1)

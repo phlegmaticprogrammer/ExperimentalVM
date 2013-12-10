@@ -38,6 +38,17 @@ trait Stack {
     SP = SP - 1
     r
   } 
+  
+  def slide(q : Long, m : Long) {
+    var i = SP - m - q + 1
+    val j = i + m
+    while (i < j) {
+      set(i, get(i + q))
+      i = i + 1
+    }
+    SP = SP - q
+  }
+  
 }
 
 trait ProgramStore {
@@ -253,6 +264,36 @@ object Instruction {
       true
     }               
   } 
+  
+  case class PUSHLOC(n : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrPUSHLOC(n)
+      true
+    }
+  }
+  
+  case class PUSHGLOB(n : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrPUSHGLOB(n)
+      true
+    }
+  }
+  
+  // q is the number of elements to delete, m the number of elements to preserve on top
+  case class SLIDE(q : Long, m : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrSLIDE(q, m)
+      true
+    }
+  }
+  
+  case object EVAL extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+        vm.instrEVAL()
+        true
+    }
+  }
+  
 }
 
 trait RunVM extends VM {
@@ -395,17 +436,39 @@ trait RunVM extends VM {
     pushb(popi() >= popi())
   }
   
-}
-
-object Test {
-  def main(args : Array[String]) {
-    val x : BigInt = 0
-    val y : Int = 0
-    val t = (x == y)
-    println("test: " + t)
+  final def instrPUSHLOC(n : Long) {
+    if (n < 0 || n > stack.SP)
+      crash()
+    else
+      stack.push(stack.get(stack.SP - n))
   }
+  
+  final def instrPUSHGLOB(n : Long) {
+    heap.resolve(GP) match {
+      case VECTOR(elems) if n >= 0 && n < elems.length =>
+        stack.push(elems(n.toInt))
+      case _ => 
+        crash()
+    }   
+  }
+  
+  final def instrSLIDE(q : Long, m : Long) {
+    if (q < 0 || m < 0 || q + m > stack.SP + 1)
+      crash()
+    else {
+      stack.slide(q, m)
+    }
+  }
+  
+  final def instrEVAL() {
+    resolve(0) match {
+      case CLOSURE(cp, gp) => crash() // to be implemented
+      case _ =>
+    }
+  }
+  
+  
 }
-
 
 
 

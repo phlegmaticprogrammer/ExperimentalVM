@@ -16,15 +16,24 @@ class Compiler(builder : CodeBuilder) {
   
   def compile(expr : Expr) : CodeBlock = {
     val code = builder.allocCodeBlock("Main")
-    compile(Map(), 0, code, expr)
+    compile(true, Map(), 0, code, expr)
     code += HALT
     code
   }
   
+  def getvar(evaluated : Boolean, env : Env, stacklevel : Long, code : CodeBlock, name : String) {
+    env(name) match {
+      case Local(z) => code += PUSHLOC(stacklevel - z)
+      case Global(z) => code += PUSHGLOB(z)
+    }
+    if (evaluated) code += EVAL
+  }
+  
   /**
-   * compile does result in an INT or a ref to a value which is not a closure
+   * compile does result in an INT or a ref to a value 
+   * if evaluated is true, then the value may not be a closure
    */
-  def compile(env : Env, stacklevel : Long, code : CodeBlock, expr : Expr) {
+  def compile(evaluated : Boolean, env : Env, stacklevel : Long, code : CodeBlock, expr : Expr) {
     expr match {
       case Integer(value) => 
         if (value.isValidLong)
@@ -32,14 +41,14 @@ class Compiler(builder : CodeBuilder) {
         else
           code += LOADINTEGER(INTEGER(value))
       case UnaryOperation(op, expr) =>
-        compile(env, stacklevel, code, expr)
+        compile(true, env, stacklevel, code, expr)
         op match {
           case Neg => code += NEG
           case Not => code += NOT
         }
       case BinaryOperation(op, left, right) =>
-        compile(env, stacklevel, code, right)
-        compile(env, stacklevel+1, code, left)
+        compile(true, env, stacklevel, code, right)
+        compile(true, env, stacklevel+1, code, left)
         op match {
           case Add => code += ADD
           case Sub => code += SUB
@@ -54,20 +63,26 @@ class Compiler(builder : CodeBuilder) {
           case Geq => code += GEQ
         }
       case If(cond, thenExpr, elseExpr) =>
-        compile(env, stacklevel, code, cond)
+        compile(true, env, stacklevel, code, cond)
         var A : CodePointer = null
         var B : CodePointer = null
         code += JUMPZ(A)
         val jump_A = code.size - 1
-        compile(env, stacklevel, code, thenExpr)
+        compile(evaluated, env, stacklevel, code, thenExpr)
         code += JUMP(B)
         val jump_B = code.size - 1
         A = code.ptr(code.size)
-        compile(env, stacklevel, code, elseExpr)
+        compile(evaluated, env, stacklevel, code, elseExpr)
         B = code.ptr(code.size)
         code.replace(jump_A, JUMPZ(A))
         code.replace(jump_B, JUMP(B))
-      case _ => throw new RuntimeException("cannot compile: " + expr)
+      case Var(name) =>
+        getvar(evaluated, env, stacklevel, code, name)
+      case Let(Definition(name, expr), body) =>
+        compile(false, env, stacklevel, code, expr)
+        compile(evaluated, env + (name -> Local(stacklevel+1)), stacklevel+1, code, body)
+        code += SLIDE(1, 1)
+      case _ => throw new RuntimeException("cannot compile: " + expr)       
     }
   }
 
@@ -107,15 +122,19 @@ object Compiler {
     
   def un(op : Expr.UnaryOperator, expr : Expr) : Expr =
     Expr.UnaryOperation(op, expr)
-
+    
+  def let(name : String, expr : Expr, body : Expr) : Expr =
+    Expr.Let(Expr.Definition(name, expr), body)
   
   def main(args : Array[String]) {
     import Expr._
     import Value._
     import scala.language.implicitConversions
     implicit def int2expr(i : Long) : Expr = Integer(i)
+    implicit def str2expr(name : String) : Expr = Var(name)    
     check(42, INT(42))
     check(bin(Add, 2, If(3, bin(Sub, 4, 5), 0)), INT(1))
+    check(let("a", 19, let("b", bin(Mul, "a", "a"), bin(Sub, "a", "b"))), INT(-342))
   }
     
 }
