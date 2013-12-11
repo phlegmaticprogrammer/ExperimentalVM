@@ -110,6 +110,7 @@ class Compiler(builder : CodeBuilder) {
         var i = 0
         for (x <- params) {
           funenv = funenv + (x -> Local(-i))
+          i = i + 1
         }
         val k = params.length
         funcode += TARG(k)
@@ -128,6 +129,22 @@ class Compiler(builder : CodeBuilder) {
         code += APPLY
         A = code.ptr(code.size)
         code.replace(mark_A, MARK(A))
+      case LetRec(definitions, body) =>
+        val n = definitions.length
+        code += ALLOC(n)
+        var newenv = env
+        var i = 0
+        for (definition <- definitions) {
+          i = i + 1
+          newenv = newenv + (definition.name -> Local(stacklevel + i))
+        }
+        for (definition <- definitions) {
+          compile(false, newenv, stacklevel + n, code, definition.expr)
+          code += REWRITE(i)
+          i = i - 1
+        }
+        compile(true, newenv, stacklevel + n, code, body)
+        code += SLIDE(n, 1)
       case _ => throw new RuntimeException("cannot compile: " + expr)       
     }
   }
@@ -157,9 +174,12 @@ object Compiler {
   def check(expr : Expr, expectedValue : Value) {
     val value = run(expr)
     if (value == expectedValue) {
-      println("OK: expr = "+expr+", value = "+value)
+      println("OK: expr = "+expr)
+      println("    value = "+value)
     } else {
-      println("FAIL: expr = "+expr+", value = "+value+", expected value = "+expectedValue)
+      println("FAIL: expr = " + expr)
+      println("      value = " + value)
+      println("      expected value = " + expectedValue)
     }
   }
   
@@ -182,6 +202,11 @@ object Compiler {
     check(bin(Add, 2, If(3, bin(Sub, 4, 5), 0)), INT(1))
     check(let("a", 19, let("b", bin(Mul, "a", "a"), bin(Sub, "a", "b"))), INT(-342))
     check(let("a", 17, let("f", Fun(List("b"), bin(Add, "a", "b")), App("f", List(42)))), INT(59))
+    val f = Definition("f", Fun(List("x", "y"), If(bin(Leq, "y", 1), "x", 
+        App("f", List(bin(Mul, "x", "y"), bin(Sub, "y", 1))))))
+    val g = Definition("g", Fun(List("x"), App("f", List(1, "x")))) 
+    check(LetRec(List(f, g), App("g", List(10))), INT(3628800))
+    check(LetRec(List(g, f), App("g", List(10))), INT(3628800))
   }
     
 }

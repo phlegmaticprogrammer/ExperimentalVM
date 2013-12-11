@@ -350,6 +350,20 @@ object Instruction {
     }    
   }
   
+  case class ALLOC(n : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrALLOC(n)
+      true
+    }
+  }
+
+  case class REWRITE(j : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrREWRITE(j)
+      true
+    }
+  }
+  
 }
 
 trait RunVM extends VM {
@@ -358,6 +372,7 @@ trait RunVM extends VM {
     var instr : Instruction = null
     do {
       instr = programStore.read()
+      //println("instruction = "+instr)
     } while (instr.execute(this))
   }
   
@@ -505,7 +520,7 @@ trait RunVM extends VM {
   }
   
   final def instrSLIDE(q : Long, m : Long) {
-    if (q < 0 || m < 0 || q + m > stack.SP + 1)
+    if (q < 0 || m < 0 || q + m > stack.size)
       crash()
     else {
       stack.slide(q, m)
@@ -610,6 +625,24 @@ trait RunVM extends VM {
           case _ => crash()
         }
       case _ => crash()  
+    }
+  }
+    
+  final def instrALLOC(n : Long) {
+    var m = n
+    while (m > 0) {
+      stack.push(heap.alloc(CLOSURE(null, null)))
+      m = m - 1
+    }
+  }
+  
+  final def instrREWRITE(j : Long) {
+    val sp = stack.SP - j
+    val value = pop()
+    stack.get(sp) match {
+      case r : Reference =>
+        heap.update(r, value)
+      case _ => crash()
     }
   }
   
