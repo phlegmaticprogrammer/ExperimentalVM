@@ -94,6 +94,40 @@ class Compiler(builder : CodeBuilder) {
         compile(false, env, stacklevel, code, expr)
         compile(evaluated, env + (name -> Local(stacklevel+1)), stacklevel+1, code, body)
         slide(code, 1, 1)
+      case Fun(params, body) =>
+        val freeVars = expr.freeVars.toList
+        var sl = stacklevel
+        var funenv = env
+        for (v <- freeVars) {
+          getvar(false, env, sl, code, v)
+          funenv = funenv + (v -> Global(sl - stacklevel))
+          sl = sl + 1
+        }
+        code += LOADINT(INT(sl-stacklevel))
+        code += MKVEC
+        val funcode = builder.allocCodeBlock()
+        code += MKFUNVAL(funcode.ptr(0))
+        var i = 0
+        for (x <- params) {
+          funenv = funenv + (x -> Local(-i))
+        }
+        val k = params.length
+        funcode += TARG(k)
+        compile(false, funenv, 0, funcode, body)
+        funcode += RETURN(k)        
+      case App(f, args) =>
+        var A : CodePointer = null
+        code += MARK(A)
+        val mark_A = code.size - 1
+        var sl = stacklevel + 3
+        for (arg <- args.reverse) {
+          compile(false, env, sl, code, arg)
+          sl = sl + 1
+        }
+        compile(true, env, sl, code, f)
+        code += APPLY
+        A = code.ptr(code.size)
+        code.replace(mark_A, MARK(A))
       case _ => throw new RuntimeException("cannot compile: " + expr)       
     }
   }
@@ -147,6 +181,7 @@ object Compiler {
     check(42, INT(42))
     check(bin(Add, 2, If(3, bin(Sub, 4, 5), 0)), INT(1))
     check(let("a", 19, let("b", bin(Mul, "a", "a"), bin(Sub, "a", "b"))), INT(-342))
+    check(let("a", 17, let("f", Fun(List("b"), bin(Add, "a", "b")), App("f", List(42)))), INT(59))
   }
     
 }

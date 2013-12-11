@@ -1,18 +1,44 @@
 package com.ubikuitous.experimentalvm.compiler
 
-sealed trait Expr
+sealed trait Expr {
+  lazy val freeVars : Set[String] = calcFreeVars
+  protected def calcFreeVars : Set[String] 
+}
 object Expr {
-  case class Integer(value : BigInt) extends Expr
-  case class Var(name : String) extends Expr
-  case class UnaryOperation(op : UnaryOperator, expr : Expr) extends Expr
-  case class BinaryOperation(op : BinaryOperator, left : Expr, right : Expr) extends Expr
-  case class If(cond : Expr, thenCase : Expr, elseCase : Expr) extends Expr
-  case class App(f : Expr, args : List[Expr]) extends Expr
-  case class Fun(params : List[String], body : Expr) extends Expr
-  case class Definition(name : String, expr : Expr)
-  case class Let(definition : Definition, body : Expr) extends Expr
-  case class LetRec(definitions : List[Definition], body : Expr) extends Expr
-  case class Lazy(expr : Expr) extends Expr  
+  case class Integer(value : BigInt) extends Expr {
+    protected def calcFreeVars = Set()
+  }
+  case class Var(name : String) extends Expr {
+    protected def calcFreeVars = Set(name)
+  }
+  case class UnaryOperation(op : UnaryOperator, expr : Expr) extends Expr {
+    protected def calcFreeVars = expr.freeVars
+  }
+  case class BinaryOperation(op : BinaryOperator, left : Expr, right : Expr) extends Expr {
+    protected def calcFreeVars = left.freeVars ++ right.freeVars
+  }
+  case class If(cond : Expr, thenCase : Expr, elseCase : Expr) extends Expr {
+    protected def calcFreeVars = cond.freeVars ++ thenCase.freeVars ++ elseCase.freeVars
+  }
+  case class App(f : Expr, args : List[Expr]) extends Expr {
+    protected def calcFreeVars = args.foldLeft(f.freeVars)(_ ++ _.freeVars)
+  }
+  case class Fun(params : List[String], body : Expr) extends Expr {
+    protected def calcFreeVars = body.freeVars -- params.toSet
+  }
+  case class Definition(name : String, expr : Expr) 
+  case class Let(definition : Definition, body : Expr) extends Expr {
+    protected def calcFreeVars = definition.expr.freeVars ++ (body.freeVars - definition.name)
+  }
+  case class LetRec(definitions : List[Definition], body : Expr) extends Expr {
+    protected def calcFreeVars : Set[String] = {
+      val names = definitions.map(_.name).toSet
+      definitions.foldLeft(body.freeVars)(_ ++ _.expr.freeVars) -- names
+    }
+  }
+  case class Lazy(expr : Expr) extends Expr {
+    protected def calcFreeVars = expr.freeVars
+  }
  
   sealed trait UnaryOperator 
   case object Neg extends UnaryOperator

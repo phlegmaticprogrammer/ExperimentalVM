@@ -1,10 +1,16 @@
 package com.ubikuitous.experimentalvm.vm
 
-trait CodePointer 
 
-sealed trait StackElement
+sealed trait StackElement 
 
 trait Reference extends StackElement
+
+trait CodePointer extends StackElement {
+  def predecessor : CodePointer
+  def successor : CodePointer
+}
+
+final class StackPointer(val sp : Long) extends StackElement
 
 sealed abstract class Value 
 object Value {
@@ -49,6 +55,8 @@ trait Stack {
     SP = SP - q
   }
   
+  def size = SP + 1
+  
 }
 
 trait ProgramStore {
@@ -82,6 +90,7 @@ trait VM {
     stack.get(stack.SP - delta) match {
       case e : Value.INT => e
       case r : Reference => heap.resolve(r)
+      case _ => crash()
     }
   }
     
@@ -89,6 +98,7 @@ trait VM {
     stack.pop() match {
       case e : Value.INT => e
       case r : Reference => heap.resolve(r)
+      case _ => crash()
     }
   }
     
@@ -98,6 +108,10 @@ trait VM {
       case _ => stack.push(heap.alloc(value))
     }
   }
+  
+  final def crash[T]() : T = {
+    throw new RuntimeException("VM crashed")
+  }  
 
 }
 
@@ -294,6 +308,48 @@ object Instruction {
     }
   }
   
+  case object MKVEC extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrMKVEC()
+      true
+    }
+  }
+  
+  case class MKFUNVAL(cp : CodePointer) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrMKFUNVAL(cp)
+      true
+    }
+  }
+  
+  case class TARG(k : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrTARG(k)
+      true
+    }
+  }
+  
+  case class RETURN(k : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrRETURN(k)
+      true
+    }
+  }
+  
+  case class MARK(cp : CodePointer) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrMARK(cp)
+      true
+    }
+  }
+  
+  case object APPLY extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrAPPLY()
+      true
+    }    
+  }
+  
 }
 
 trait RunVM extends VM {
@@ -303,10 +359,6 @@ trait RunVM extends VM {
     do {
       instr = programStore.read()
     } while (instr.execute(this))
-  }
-
-  final def crash[T]() : T = {
-    throw new RuntimeException("VM crashed")
   }
   
   import Value._
@@ -462,11 +514,104 @@ trait RunVM extends VM {
   
   final def instrEVAL() {
     resolve(0) match {
-      case CLOSURE(cp, gp) => crash() // to be implemented
+      case CLOSURE(cp, gp) => 
+        crash() // to be implemented
       case _ =>
     }
   }
   
+  final def instrMKVEC() {
+    val n = popi()
+    if (n > stack.size)
+      crash()
+    else {
+      var i = n.toInt
+      val arr : Array[StackElement] = new Array(i)
+      while (i > 0) {
+        i = i - 1
+        arr(i) = stack.pop()
+      }
+      stack.push(heap.alloc(Value.VECTOR(arr)))
+    } 
+  }
+  
+  private val empty_AP = VECTOR(Array())
+  
+  final def instrMKFUNVAL(cp : CodePointer) {
+    resolve(0) match {
+      case VECTOR(_) =>
+        val gp = stack.pop().asInstanceOf[Reference]
+        val ap = heap.alloc(empty_AP)
+        val f = FUNCTION(cp, ap, gp)
+        stack.push(heap.alloc(f))
+      case _ => 
+        crash()
+    } 
+  }
+  
+  final def microWRAP() {
+    val ap : Reference = 
+      stack.pop() match {
+        case r : Reference => r
+        case _ => crash()
+      }
+    val cp = programStore.CP.predecessor
+    val f = FUNCTION(cp, ap, GP)
+    stack.push(heap.alloc(f))
+  }
+  
+  final def microPOPENV() {
+    val result = stack.pop()
+    stack.SP = stack.FP
+    val cp = stack.pop().asInstanceOf[CodePointer]
+    stack.FP = stack.pop().asInstanceOf[StackPointer].sp
+    GP = stack.pop().asInstanceOf[Reference]
+    stack.push(result)
+    programStore.goto(cp) 
+  }
+  
+  final def instrTARG(k : Long) {
+    val n = stack.SP - stack.FP
+    if (n < k) {
+      pushi(n)
+      instrMKVEC()
+      microWRAP()
+      microPOPENV()
+    }
+  }
+  
+  final def instrRETURN(k : Long) {
+    val n = stack.SP - stack.FP - 1
+    if (n <= k)
+      microPOPENV()
+    else {
+      instrSLIDE(k, 1)
+      instrEVAL()
+      instrAPPLY()
+    } 
+      
+  }
+  
+  final def instrMARK(cp : CodePointer) {
+    stack.push(GP)
+    stack.push(new StackPointer(stack.FP))
+    stack.push(cp)
+    stack.FP = stack.SP
+  }
+  
+  final def instrAPPLY() {
+    pop() match {
+      case FUNCTION(cp, ap, gp) =>
+        heap.resolve(ap) match {
+          case VECTOR(args) =>
+            for (arg <- args) stack.push(arg)
+            GP = gp
+            programStore.goto(cp)
+          case _ => crash()
+        }
+      case _ => crash()  
+    }
+  }
   
 }
 

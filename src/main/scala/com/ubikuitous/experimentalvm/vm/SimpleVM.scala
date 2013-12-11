@@ -2,7 +2,10 @@ package com.ubikuitous.experimentalvm.vm
 
 final class SimpleReference(var value : Value) extends Reference
 
-final class SimpleCodePointer(val codeblock : Int, val index : Long) extends CodePointer
+final class SimpleCodePointer(val codeblock : Int, val index : Long) extends CodePointer {
+  def predecessor : CodePointer = new SimpleCodePointer(codeblock, index - 1)
+  def successor : CodePointer = new SimpleCodePointer(codeblock, index + 1)
+}
 
 final class SimpleHeap extends Heap {
   def alloc(value : Value) : Reference = new SimpleReference(value)
