@@ -1,6 +1,5 @@
 package com.ubikuitous.experimentalvm.vm
 
-
 sealed trait StackElement 
 
 trait Reference extends StackElement
@@ -79,6 +78,8 @@ sealed abstract class Instruction {
   def execute(vm : RunVM) : Boolean 
 }
 
+final class Crash() extends RuntimeException("VM crashed")
+
 trait VM {
   
   val stack : Stack
@@ -110,7 +111,7 @@ trait VM {
   }
   
   final def crash[T]() : T = {
-    throw new RuntimeException("VM crashed")
+    throw new Crash()
   }  
 
 }
@@ -364,6 +365,20 @@ object Instruction {
     }
   }
   
+  case class MKCLOS(cp : CodePointer) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrMKCLOS(cp)
+      true
+    }    
+  } 
+  
+  case object UPDATE extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrUPDATE()
+      true
+    }        
+  }
+  
 }
 
 trait RunVM extends VM {
@@ -526,15 +541,7 @@ trait RunVM extends VM {
       stack.slide(q, m)
     }
   }
-  
-  final def instrEVAL() {
-    resolve(0) match {
-      case CLOSURE(cp, gp) => 
-        crash() // to be implemented
-      case _ =>
-    }
-  }
-  
+    
   final def instrMKVEC() {
     val n = popi()
     if (n > stack.size)
@@ -644,6 +651,35 @@ trait RunVM extends VM {
         heap.update(r, value)
       case _ => crash()
     }
+  }
+  
+  final def instrEVAL() {
+    resolve(0) match {
+      case CLOSURE(cp, gp) => 
+        if (cp != null && gp != null) {
+          instrMARK(programStore.CP)
+          GP = gp
+          programStore.goto(cp)
+        } else
+          crash()
+      case _ =>
+    }
+  }  
+  
+  final def instrMKCLOS(cp : CodePointer) {
+    resolve(0) match {
+      case VECTOR(_) =>
+        val gp = stack.pop().asInstanceOf[Reference]
+        val c = CLOSURE(cp, gp)
+        stack.push(heap.alloc(c))
+      case _ => 
+        crash()
+    }     
+  }
+  
+  final def instrUPDATE() {
+    microPOPENV()
+    instrREWRITE(1)
   }
   
 }

@@ -41,6 +41,20 @@ class Compiler(builder : CodeBuilder) {
     code += SLIDE(q, m)
   }
   
+  def captureGlobalVec(env : Env, stacklevel : Long, code : CodeBlock, expr : Expr) : Env = {
+    val freeVars = expr.freeVars.toList
+    var sl = stacklevel
+    var funenv = env
+    for (v <- freeVars) {
+      getvar(false, env, sl, code, v)
+      funenv = funenv + (v -> Global(sl - stacklevel))
+      sl = sl + 1
+    }
+    code += LOADINT(INT(sl-stacklevel))
+    code += MKVEC
+    funenv
+  }
+  
   /**
    * compile does result in an INT or a ref to a value 
    * if evaluated is true, then the value may not be a closure
@@ -95,16 +109,7 @@ class Compiler(builder : CodeBuilder) {
         compile(evaluated, env + (name -> Local(stacklevel+1)), stacklevel+1, code, body)
         slide(code, 1, 1)
       case Fun(params, body) =>
-        val freeVars = expr.freeVars.toList
-        var sl = stacklevel
-        var funenv = env
-        for (v <- freeVars) {
-          getvar(false, env, sl, code, v)
-          funenv = funenv + (v -> Global(sl - stacklevel))
-          sl = sl + 1
-        }
-        code += LOADINT(INT(sl-stacklevel))
-        code += MKVEC
+        var funenv = captureGlobalVec(env, stacklevel, code, expr)
         val funcode = builder.allocCodeBlock()
         code += MKFUNVAL(funcode.ptr(0))
         var i = 0
@@ -129,6 +134,7 @@ class Compiler(builder : CodeBuilder) {
         code += APPLY
         A = code.ptr(code.size)
         code.replace(mark_A, MARK(A))
+        if (evaluated) code += EVAL
       case LetRec(definitions, body) =>
         val n = definitions.length
         code += ALLOC(n)
@@ -143,8 +149,18 @@ class Compiler(builder : CodeBuilder) {
           code += REWRITE(i)
           i = i - 1
         }
-        compile(true, newenv, stacklevel + n, code, body)
+        compile(evaluated, newenv, stacklevel + n, code, body)
         code += SLIDE(n, 1)
+      case Lazy(body : Expr) =>
+        if (evaluated) {
+          compile(true, env, stacklevel, code, body)
+        } else {
+          var closenv = captureGlobalVec(env, stacklevel, code, expr)
+          val closcode = builder.allocCodeBlock()
+          code += MKCLOS(closcode.ptr(0))
+          compile(true, closenv, 0, closcode, body)
+          closcode += UPDATE                 
+        }
       case _ => throw new RuntimeException("cannot compile: " + expr)       
     }
   }
@@ -183,6 +199,23 @@ object Compiler {
     }
   }
   
+  def crash(expr : Expr) {
+    var value : Value = null
+    var crashed : Boolean = false
+    try {
+      value = run(expr)
+    } catch {
+      case c: Crash => 
+        crashed = true
+    }
+    if (crashed) {
+      println("OK (crash): expr = "+expr)
+    } else {
+      println("FAIL (no crash): expr = " + expr)
+      println("      value = " + value)
+    }    
+  }
+  
   def bin(op : Expr.BinaryOperator, left : Expr, right : Expr) : Expr =
     Expr.BinaryOperation(op, left, right)    
     
@@ -207,6 +240,14 @@ object Compiler {
     val g = Definition("g", Fun(List("x"), App("f", List(1, "x")))) 
     check(LetRec(List(f, g), App("g", List(10))), INT(3628800))
     check(LetRec(List(g, f), App("g", List(10))), INT(3628800))
+    check(Lazy(23), INT(23))
+    check(Lazy(Lazy(23)), INT(23)) 
+    val a = Definition("a", "b")
+    val la = Definition("a", Lazy("b"))
+    val b = Definition("b", 10)
+    check(LetRec(List(b, a), "a"), INT(10))
+    crash(LetRec(List(a, b), "a"))
+    check(LetRec(List(la, b), "a"), INT(10))
   }
     
 }
