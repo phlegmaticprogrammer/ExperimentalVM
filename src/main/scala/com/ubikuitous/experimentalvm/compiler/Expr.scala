@@ -4,6 +4,7 @@ sealed trait Expr {
   lazy val freeVars : Set[String] = calcFreeVars
   protected def calcFreeVars : Set[String] 
 }
+
 object Expr {
   case class Integer(value : BigInt) extends Expr {
     protected def calcFreeVars = Set()

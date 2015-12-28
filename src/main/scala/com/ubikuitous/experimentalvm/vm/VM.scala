@@ -280,6 +280,13 @@ object Instruction {
     }               
   } 
   
+  case class REWRITELOC(n : Long) extends Instruction {
+    def execute(vm : RunVM) : Boolean = {
+      vm.instrREWRITELOC(n)
+      true
+    }    
+  }
+  
   case class PUSHLOC(n : Long) extends Instruction {
     def execute(vm : RunVM) : Boolean = {
       vm.instrPUSHLOC(n)
@@ -652,6 +659,12 @@ trait RunVM extends VM {
       case _ => crash()
     }
   }
+  
+  final def instrREWRITELOC(j : Long) {
+    val sp = stack.SP - j
+    val value = stack.pop()
+    stack.set(sp, value)
+  }  
   
   final def instrEVAL() {
     resolve(0) match {
